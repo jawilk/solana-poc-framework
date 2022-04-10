@@ -1,3 +1,34 @@
+## GDB support for solana rbpf vm and neodyme poc framework  
+This fork is adding debugging support to the poc framework.  
+To enable program debugging, add .add_programs_to_debug(&[&program_pubkey]) to the local environment builder e.g.
+```
+let path_hello_world_binary = {
+        dir.pop();
+        dir.pop();
+        dir.push("deploy");
+        dir.push("helloworld_rust_unoptimized.so");
+        dir.to_str()
+    }
+    .unwrap();
+    let a_lot_of_money = sol_to_lamports(1_000_000.0);
+
+    let helloworld_program =
+        Pubkey::from_str("H311ot3333333333333333333333333333333333333").unwrap();
+    let payer = keypair(0);
+    let greeting_account = keypair(1);
+    let data: [u8; 4] = [0; 4];
+   
+    let mut env = LocalEnvironment::builder()
+        .add_program(helloworld_program, path_hello_world_binary)
+        .add_programs_to_debug(&[&helloworld_program])
+        .add_account_with_lamports(payer.pubkey(), system_program::ID, sol_to_lamports(1.0))
+    	.add_account_with_data(greeting_account.pubkey(), helloworld_program, &data, false)
+        .build();
+
+```
+  
+    
+
 # Solana PoC Framework
 
 [![](https://img.shields.io/crates/v/poc-framework)](https://crates.io/crates/poc-framework) [![](https://docs.rs/poc-framework/badge.svg)](https://docs.rs/poc-framework/)
