@@ -12,7 +12,7 @@ use rand::{prelude::StdRng, rngs::OsRng, SeedableRng};
 use serde::de::DeserializeOwned;
 use sha2::{Digest, Sha256};
 use solana_bpf_loader_program::{
-    solana_bpf_loader_deprecated_program, solana_bpf_loader_debug_program,,
+    solana_bpf_loader_deprecated_program, solana_bpf_loader_debug_program,
     solana_bpf_loader_upgradeable_program,
 };
 use solana_cli_output::display::println_transaction;
