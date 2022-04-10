@@ -12,7 +12,7 @@ use rand::{prelude::StdRng, rngs::OsRng, SeedableRng};
 use serde::de::DeserializeOwned;
 use sha2::{Digest, Sha256};
 use solana_bpf_loader_program::{
-    solana_bpf_loader_deprecated_program, solana_bpf_loader_program,
+    solana_bpf_loader_deprecated_program, solana_bpf_loader_debug_program,,
     solana_bpf_loader_upgradeable_program,
 };
 use solana_cli_output::display::println_transaction;
@@ -54,6 +54,8 @@ use solana_transaction_status::{
 };
 use spl_associated_token_account::get_associated_token_address;
 use tempfile::TempDir;
+
+use programs_to_debug_thread_local::set_thread_local;
 
 pub use bincode;
 pub use borsh;
@@ -527,6 +529,11 @@ impl LocalEnvironmentBuilder {
         self
     }
 
+    pub fn add_programs_to_debug(&mut self, pubkeys: &[&Pubkey]) -> &mut Self {
+        set_thread_local(pubkeys);
+	self
+    }
+
     // Adds a rent-excempt account into the environment.
     pub fn add_account_with_data(
         &mut self,
@@ -715,7 +722,7 @@ impl LocalEnvironmentBuilder {
             Some(&Builtins {
                 genesis_builtins: [
                     solana_bpf_loader_upgradeable_program!(),
-                    solana_bpf_loader_program!(),
+                    solana_bpf_loader_debug_program!(),
                     solana_bpf_loader_deprecated_program!(),
                 ]
                 .iter()

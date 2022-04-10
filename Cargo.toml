@@ -21,7 +21,8 @@ solana-logger = "=1.8.14"
 solana-runtime = "=1.8.14"
 solana-transaction-status = "=1.8.14"
 solana-cli-output = "=1.8.14"
-solana-bpf-loader-program = "=1.8.14"
+solana-bpf-loader-program = { git = "https://github.com/jawilk/bpf-loader-debug" }
+programs-to-debug-thread-local = { git = "https://github.com/jawilk/programs-to-debug-thread-local" }
 solana-ed25519-program = "=1.8.14"
 solana-compute-budget-program = "=1.8.14"
 solana-vote-program = "=1.8.14"
