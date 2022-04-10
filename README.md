@@ -1,4 +1,5 @@
 ## GDB support for solana rbpf vm and neodyme poc framework  
+#### Please see https://github.com/jawilk/solana-poc-debugging-example for setup instructions
 This fork is adding debugging support to the poc framework.  
 To enable program debugging, add .add_programs_to_debug(&[&program_pubkey]) to the local environment builder e.g.
 ```
