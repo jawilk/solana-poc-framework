@@ -1,4 +1,5 @@
 use crate::solana_sdk::clock::UnixTimestamp;
+use std::str::FromStr;
 use std::{
     collections::{HashMap, HashSet},
     convert::TryInto,
@@ -61,12 +62,6 @@ pub use solana_client;
 pub use solana_program;
 pub use solana_sdk;
 pub use solana_transaction_status;
-pub use spl_associated_token_account;
-pub use spl_memo;
-pub use spl_token;
-
-mod keys;
-mod programs;
 
 /// A generic Environment trait. Provides the possibility of writing generic exploits that work both remote and local, for easy debugging.
 pub trait Environment {
@@ -74,6 +69,9 @@ pub trait Environment {
     fn payer(&self) -> Keypair;
     /// Executes the batch of transactions in the right order and waits for them to be confirmed. The execution results are returned.
     fn execute_transaction<T>(&mut self, txs: T) -> EncodedConfirmedTransactionWithStatusMeta
+    where
+        VersionedTransaction: From<T>;
+    fn simulate_transaction<T>(&mut self, txs: T)
     where
         VersionedTransaction: From<T>;
     /// Fetch a recent blockhash, for construction of transactions.
@@ -120,6 +118,40 @@ pub trait Environment {
         Transaction::new(&signer_vec, message, self.get_latest_blockhash())
     }
 
+    fn tx_with_instructions_unsigned(
+        &self,
+        instructions: &[Instruction],
+        payer: &Pubkey,
+    ) -> Transaction {
+        //let mut signer_vec = vec![&payer];
+        //signer_vec.extend_from_slice(signers);
+
+        let message =
+            Message::new_with_blockhash(instructions, Some(&payer), &self.get_latest_blockhash());
+        println!("\nmessage: {:?}\n", message);
+        //let num_sigs: usize = message.header.num_required_signatures.into();
+        /*let required_sigs = message.account_keys[..num_sigs]
+            .into_iter()
+            .copied()
+            .collect::<HashSet<_>>();
+        let provided_sigs = signer_vec
+            .iter()
+            .map(|x| x.pubkey())
+            .collect::<HashSet<_>>();
+
+        for key in required_sigs.difference(&provided_sigs) {
+            println!("missing signature from {}", key.to_string());
+        }
+
+        for key in provided_sigs.difference(&required_sigs) {
+            println!("unnecessary signature from {}", key.to_string());
+        }*/
+
+        let tx = Transaction::new_unsigned(message);
+        //tx.sign(&[&self.payer()], self.get_latest_blockhash());
+        tx
+    }
+
     /// Assemble the given instructions into a transaction and sign it. All transactions executed by this method are signed and payed for by the payer.
     fn execute_as_transaction(
         &mut self,
@@ -128,6 +160,11 @@ pub trait Environment {
     ) -> EncodedConfirmedTransactionWithStatusMeta {
         let tx = self.tx_with_instructions(instructions, signers);
         return self.execute_transaction(tx);
+    }
+
+    fn execute_as_transaction_unsigned(&mut self, instructions: &[Instruction], payer: &Pubkey) {
+        let tx = self.tx_with_instructions_unsigned(instructions, payer);
+        self.simulate_transaction(tx);
     }
 
     /// Assemble the given instructions into a transaction and sign it. All transactions executed by this method are signed and payed for by the payer.
@@ -530,6 +567,145 @@ impl Environment for LocalEnvironment {
         .expect("Failed to encode transaction")
     }
 
+    fn simulate_transaction<T>(&mut self, tx: T)
+    where
+        VersionedTransaction: From<T>,
+    {
+        let tx = tx.into();
+        /*let len = bincode::serialize(&tx).unwrap().len();
+        if len > packet::PACKET_DATA_SIZE {
+            panic!(
+                "tx {:?} of size {} is {} too large",
+                tx,
+                len,
+                len - packet::PACKET_DATA_SIZE
+            )
+        }*/
+        let txs = vec![tx];
+
+        let batch = self.bank.prepare_entry_batch(txs.clone()).unwrap();
+        let tx_sanitized = batch.sanitized_transactions()[0].clone();
+        /*let slot = self.bank.slot();
+        let mut mint_decimals = HashMap::new();
+        let tx_pre_token_balances = solana_ledger::token_balances::collect_token_balances(
+            &self.bank,
+            &batch,
+            &mut mint_decimals,
+        );
+        let slot = self.bank.slot();
+        let mut timings = Default::default();
+        let (
+            TransactionResults {
+                execution_results, ..
+            },
+            TransactionBalancesSet {
+                pre_balances,
+                post_balances,
+                ..
+            },
+        )*/
+        let res = self.bank.simulate_transaction_unchecked(tx_sanitized);
+        println!("RES: {:?}", res.result);
+        println!("RES: {:?}", res.logs);
+
+        /*let tx_post_token_balances = solana_ledger::token_balances::collect_token_balances(
+            &self.bank,
+            &batch,
+            &mut mint_decimals,
+        );
+        let (
+            tx,
+            execution_result,
+            pre_balances,
+            post_balances,
+            pre_token_balances,
+            post_token_balances,
+        ) = izip!(
+            txs.iter(),
+            execution_results.into_iter(),
+            pre_balances.into_iter(),
+            post_balances.into_iter(),
+            tx_pre_token_balances.into_iter(),
+            tx_post_token_balances.into_iter(),
+        ).next().expect("transaction could not be executed. Enable debug logging to get more information on why");
+
+        let fee = self
+            .bank
+            .get_fee_for_message(tx_sanitized.message())
+            .expect("Fee calculation must succeed");
+
+        let status;
+        let inner_instructions;
+        let log_messages;
+        let return_data;
+        let compute_units_consumed;
+
+        match execution_result {
+            TransactionExecutionResult::Executed {
+                details,
+                executors: _,
+            } => {
+                status = details.status;
+                inner_instructions = details.inner_instructions;
+                log_messages = details.log_messages;
+                return_data = details.return_data;
+                compute_units_consumed = Some(details.executed_units);
+            }
+            TransactionExecutionResult::NotExecuted(err) => {
+                status = Err(err);
+                inner_instructions = None;
+                log_messages = None;
+                return_data = None;
+                compute_units_consumed = None;
+            }
+        }
+
+        let inner_instructions = inner_instructions.map(|inner_instructions| {
+            inner_instructions
+                .into_iter()
+                .enumerate()
+                .map(|(index, instructions)| InnerInstructions {
+                    index: index as u8,
+                    instructions,
+                })
+                .filter(|i| !i.instructions.is_empty())
+                .collect()
+        });
+
+        let tx_status_meta = TransactionStatusMeta {
+            status,
+            fee,
+            pre_balances,
+            post_balances,
+            pre_token_balances: Some(pre_token_balances),
+            post_token_balances: Some(post_token_balances),
+            inner_instructions,
+            log_messages,
+            rewards: None,
+            loaded_addresses: tx_sanitized.get_loaded_addresses(),
+            return_data,
+            compute_units_consumed,
+        };
+
+        ConfirmedTransactionWithStatusMeta {
+            slot,
+            tx_with_meta: TransactionWithStatusMeta::Complete(VersionedTransactionWithStatusMeta {
+                transaction: tx.clone(),
+                meta: tx_status_meta,
+            }),
+            block_time: Some(
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs()
+                    .try_into()
+                    .unwrap(),
+            ),
+        }
+        .encode(UiTransactionEncoding::Binary, Some(0))
+        .expect("Failed to encode transaction")*/
+    }
+
     fn get_latest_blockhash(&self) -> Hash {
         self.bank.last_blockhash()
     }
@@ -561,22 +737,22 @@ impl LocalEnvironmentBuilder {
         genesis_utils::activate_all_features(&mut config);
 
         let mut builder = LocalEnvironmentBuilder { faucet, config };
-        builder.add_account_with_data(
+        /*builder.add_account_with_data(
             spl_associated_token_account::ID,
             bpf_loader::ID,
             programs::SPL_ASSOCIATED_TOKEN,
             true,
-        );
-        builder.add_account_with_data(
+        );*/
+        /*builder.add_account_with_data(
             "Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo"
                 .parse()
                 .unwrap(),
             bpf_loader::ID,
             programs::SPL_MEMO1,
             true,
-        );
-        builder.add_account_with_data(spl_memo::ID, bpf_loader::ID, programs::SPL_MEMO3, true);
-        builder.add_account_with_data(spl_token::ID, bpf_loader::ID, programs::SPL_TOKEN, true);
+        );*/
+        //builder.add_account_with_data(spl_memo::ID, bpf_loader::ID, programs::SPL_MEMO3, true);
+        //builder.add_account_with_data(spl_token::ID, bpf_loader::ID, programs::SPL_TOKEN, true);
         builder.add_account_with_lamports(rent::ID, sysvar::ID, 1);
         builder
     }
@@ -590,6 +766,28 @@ impl LocalEnvironmentBuilder {
     /// Adds the account into the environment.
     pub fn add_account(&mut self, pubkey: Pubkey, account: Account) -> &mut Self {
         self.config.add_account(pubkey, account.into());
+        self
+    }
+
+    pub fn add_programs_not_supported(
+        &mut self,
+        programs: &Vec<String>,
+        rpc_client: &RpcClient,
+    ) -> &mut Self {
+        for program in programs {
+            //self.clone_upgradable_program_from_cluster(rpc_client, Pubkey::from_str(program).unwrap());
+            self.clone_account_from_cluster(Pubkey::from_str(program).unwrap(), rpc_client);
+        }
+        self
+    }
+
+    pub fn add_programs_supported(&mut self, programs: &Vec<String>) -> &mut Self {
+        for program in programs {
+            self.add_program(
+                Pubkey::from_str(program).unwrap(),
+                format!("elfs/{program}.so"),
+            );
+        }
         self
     }
 
@@ -728,6 +926,7 @@ impl LocalEnvironmentBuilder {
         let account = client
             .get_account(&pubkey)
             .expect("couldn't retrieve account");
+        println!("PUBKEY: {:?} --- account: {:?}", pubkey, account);
         self.add_account(
             pubkey,
             Account {
@@ -762,6 +961,7 @@ impl LocalEnvironmentBuilder {
         let account = client
             .get_account(&pubkey)
             .expect("couldn't retrieve account");
+        println!("account {:?}", account);
         let upgradable: UpgradeableLoaderState = account.deserialize_data().unwrap();
         if let UpgradeableLoaderState::Program {
             programdata_address,
@@ -853,6 +1053,12 @@ impl RemoteEnvironment {
 impl Environment for RemoteEnvironment {
     fn payer(&self) -> Keypair {
         clone_keypair(&self.payer)
+    }
+
+    fn simulate_transaction<T>(&mut self, _txs: T)
+    where
+        VersionedTransaction: From<T>,
+    {
     }
 
     fn execute_transaction<T>(&mut self, tx: T) -> EncodedConfirmedTransactionWithStatusMeta
@@ -990,9 +1196,9 @@ pub fn random_keypair() -> Keypair {
 
 /// Return a recognisable Keypair. The public key will start with `Kxxx`, where xxx are the three digits of the number.
 /// `o` is used instead of `0`, as `0` is not part of the base58 charset.
-pub fn keypair(n: u8) -> Keypair {
-    Keypair::from_bytes(&keys::KEYPAIRS[n as usize]).unwrap()
-}
+//pub fn keypair(n: u8) -> Keypair {
+//  Keypair::from_bytes(&keys::KEYPAIRS[n as usize]).unwrap()
+//}
 
 /// Constructs a devnet client using `CommitmentConfig::confirmed()`.
 pub fn devnet_client() -> RpcClient {
