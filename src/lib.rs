@@ -923,20 +923,22 @@ impl LocalEnvironmentBuilder {
     /// Clone an account from a cluster using the given rpc client. Use [clone_upgradable_program_from_cluster] if you want to clone a upgradable program, as this requires multiple accounts.
     pub fn clone_account_from_cluster(&mut self, pubkey: Pubkey, client: &RpcClient) -> &mut Self {
         println!("Loading account {} from cluster", pubkey);
-        let account = client
-            .get_account(&pubkey)
-            .expect("couldn't retrieve account");
-        println!("PUBKEY: {:?} --- account: {:?}", pubkey, account);
-        self.add_account(
-            pubkey,
-            Account {
-                lamports: account.lamports,
-                data: account.data,
-                executable: account.executable,
-                owner: account.owner,
-                rent_epoch: 0,
-            },
-        )
+        match client.get_account(&pubkey) {
+            Ok(account) => {
+                println!("PUBKEY: {:?} --- account: {:?}", pubkey, account);
+                self.add_account(
+                    pubkey,
+                    Account {
+                        lamports: account.lamports,
+                        data: account.data,
+                        executable: account.executable,
+                        owner: account.owner,
+                        rent_epoch: 0,
+                    },
+                )
+            }
+            _ => self,
+        }
     }
 
     /// Clone multiple accounts from a cluster using the given rpc client.
