@@ -128,7 +128,6 @@ pub trait Environment {
 
         let message =
             Message::new_with_blockhash(instructions, Some(&payer), &self.get_latest_blockhash());
-        println!("\nmessage: {:?}\n", message);
         //let num_sigs: usize = message.header.num_required_signatures.into();
         /*let required_sigs = message.account_keys[..num_sigs]
             .into_iter()
@@ -922,10 +921,8 @@ impl LocalEnvironmentBuilder {
 
     /// Clone an account from a cluster using the given rpc client. Use [clone_upgradable_program_from_cluster] if you want to clone a upgradable program, as this requires multiple accounts.
     pub fn clone_account_from_cluster(&mut self, pubkey: Pubkey, client: &RpcClient) -> &mut Self {
-        println!("Loading account {} from cluster", pubkey);
         match client.get_account(&pubkey) {
             Ok(account) => {
-                println!("PUBKEY: {:?} --- account: {:?}", pubkey, account);
                 self.add_account(
                     pubkey,
                     Account {
